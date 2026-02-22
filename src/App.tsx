@@ -919,7 +919,7 @@ export default function App() {
         <Route
           path="/*"
           element={
-            <RequireAuth allowedRoles={[ALLOWED_ROLE]}>
+            <RequireAuth allowedRoles={[UserRole.PSICOLOGA, UserRole.ADMIN]}>
               <MainApp />
             </RequireAuth>
           }
