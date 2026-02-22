@@ -56,5 +56,6 @@ export interface PsychReminder {
     title: string;
     description: string;
     type: 'info' | 'warning' | 'success';
+    is_completed?: boolean;
     created_at?: string;
 }

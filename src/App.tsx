@@ -8,7 +8,7 @@ import StudentSearchModal from './components/StudentSearchModal';
 import {
   LogOut, User, Calendar, Plus, FileText, AlertCircle,
   Download, School, Search, X, Home as HomeIcon, Clock,
-  CheckCircle, ChevronRight, Trash2
+  CheckCircle, ChevronRight, Trash2, Edit2, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -218,7 +218,7 @@ const Home = () => {
       supabase.from('psych_attentions').select('id', { count: 'exact', head: true }).eq('psychologist_id', user.id),
       supabase.from('psych_appointments').select('id', { count: 'exact', head: true }).eq('psychologist_id', user.id).eq('date', today).eq('status', 'pending'),
       supabase.from('psych_appointments').select('*').eq('psychologist_id', user.id).eq('status', 'pending').order('date', { ascending: true }).order('time', { ascending: true }).limit(5),
-      supabase.from('psych_reminders').select('*').eq('psychologist_id', user.id).order('created_at', { ascending: false }).limit(3),
+      supabase.from('psych_reminders').select('*').eq('psychologist_id', user.id).eq('is_completed', false).order('created_at', { ascending: false }).limit(3),
     ]);
 
     setStats({
@@ -231,6 +231,13 @@ const Home = () => {
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayAppts = appointments.filter(a => a.date === todayStr);
+
+  const handleCompleteReminder = async (id: string) => {
+    // Animación optimista
+    setReminders(prev => prev.filter(r => r.id !== id));
+    await supabase.from('psych_reminders').update({ is_completed: true }).eq('id', id);
+    fetchDashboardData();
+  };
 
   return (
     <div className="p-6 md:p-10 space-y-8">
@@ -342,20 +349,24 @@ const Home = () => {
                 <div
                   key={reminder.id}
                   className={cn(
-                    "p-4 rounded-xl border flex gap-3",
+                    "p-4 rounded-xl border flex gap-3 group relative overflow-hidden transition-all hover:shadow-md cursor-pointer",
                     reminder.type === 'warning' ? "bg-yellow-50 border-yellow-100" :
                       reminder.type === 'success' ? "bg-green-50 border-green-100" :
                         "bg-blue-50 border-blue-100"
                   )}
+                  onClick={() => handleCompleteReminder(reminder.id!)}
                 >
+                  <div className="absolute inset-0 bg-white/60 opacity-0 group-hover:opacity-100 transition-opacity z-0 flex items-center justify-end px-6 backdrop-blur-[1px]">
+                    <span className="font-bold text-gray-700 flex items-center gap-2"><Check size={20} /> Tachar</span>
+                  </div>
                   <div className={cn(
-                    "mt-0.5",
+                    "mt-0.5 relative z-10",
                     reminder.type === 'warning' ? "text-yellow-600" :
                       reminder.type === 'success' ? "text-green-600" : "text-blue-600"
                   )}>
                     {reminder.type === 'warning' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
                   </div>
-                  <div>
+                  <div className="relative z-10 w-full">
                     <p className={cn("text-sm font-bold",
                       reminder.type === 'warning' ? "text-yellow-800" :
                         reminder.type === 'success' ? "text-green-800" : "text-blue-800"
@@ -516,6 +527,7 @@ const Reminders = () => {
   const [reminders, setReminders] = useState<PsychReminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ title: '', description: '', type: 'info' as 'info' | 'warning' | 'success' });
 
   const fetchReminders = async () => {
@@ -524,6 +536,7 @@ const Reminders = () => {
       .from('psych_reminders')
       .select('*')
       .eq('psychologist_id', user.id)
+      .order('is_completed', { ascending: true })
       .order('created_at', { ascending: false });
     if (data) setReminders(data);
     setLoading(false);
@@ -534,12 +547,35 @@ const Reminders = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    const { error } = await supabase.from('psych_reminders').insert([{ ...formData, psychologist_id: user.id }]);
-    if (!error) {
-      setShowModal(false);
-      fetchReminders();
-      setFormData({ title: '', description: '', type: 'info' });
+
+    if (editingId) {
+      const { error } = await supabase.from('psych_reminders').update({ ...formData }).eq('id', editingId);
+      if (!error) {
+        setShowModal(false);
+        fetchReminders();
+        setFormData({ title: '', description: '', type: 'info' });
+        setEditingId(null);
+      }
+    } else {
+      const { error } = await supabase.from('psych_reminders').insert([{ ...formData, psychologist_id: user.id }]);
+      if (!error) {
+        setShowModal(false);
+        fetchReminders();
+        setFormData({ title: '', description: '', type: 'info' });
+      }
     }
+  };
+
+  const handleEdit = (reminder: PsychReminder) => {
+    setFormData({ title: reminder.title, description: reminder.description, type: reminder.type });
+    setEditingId(reminder.id!);
+    setShowModal(true);
+  };
+
+  const toggleComplete = async (reminder: PsychReminder) => {
+    const updated = !reminder.is_completed;
+    setReminders(prev => prev.map(r => r.id === reminder.id ? { ...r, is_completed: updated } : r));
+    await supabase.from('psych_reminders').update({ is_completed: updated }).eq('id', reminder.id);
   };
 
   const handleDelete = async (id: string) => {
@@ -554,7 +590,7 @@ const Reminders = () => {
           <h1 className="text-2xl font-bold text-gray-800">Recordatorios</h1>
           <p className="text-secondary">Gestiona tus notas y avisos importantes</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
+        <Button onClick={() => { setEditingId(null); setFormData({ title: '', description: '', type: 'info' }); setShowModal(true); }}>
           <Plus size={18} /> Nuevo Recordatorio
         </Button>
       </div>
@@ -573,25 +609,35 @@ const Reminders = () => {
           ) : (
             reminders.map(reminder => (
               <Card key={reminder.id} className={cn(
-                "flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4",
+                "flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 transition-all duration-300",
                 reminder.type === 'warning' ? "border-l-yellow-400" :
-                  reminder.type === 'success' ? "border-l-green-400" : "border-l-blue-400"
+                  reminder.type === 'success' ? "border-l-green-400" : "border-l-blue-400",
+                reminder.is_completed && "opacity-60 bg-gray-50 border-gray-300 border-l-gray-400 grayscale filter"
               )}>
                 <div className="flex items-start gap-4">
                   <div className={cn("p-3 rounded-xl",
-                    reminder.type === 'warning' ? "bg-yellow-50 text-yellow-600" :
-                      reminder.type === 'success' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"
+                    reminder.is_completed ? "bg-gray-100 text-gray-500" :
+                      reminder.type === 'warning' ? "bg-yellow-50 text-yellow-600" :
+                        reminder.type === 'success' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"
                   )}>
                     {reminder.type === 'warning' ? <AlertCircle size={24} /> : <CheckCircle size={24} />}
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-800">{reminder.title}</h4>
-                    <p className="text-sm text-secondary">{reminder.description}</p>
+                    <h4 className={cn("font-bold transition-all", reminder.is_completed ? "text-gray-500 line-through" : "text-gray-800")}>{reminder.title}</h4>
+                    <p className={cn("text-sm transition-all", reminder.is_completed ? "text-gray-400 line-through" : "text-secondary")}>{reminder.description}</p>
                   </div>
                 </div>
-                <Button variant="outline" className="text-red-500 hover:bg-red-50 border-red-100" onClick={() => handleDelete(reminder.id!)}>
-                  <Trash2 size={18} />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" className={cn("p-2", reminder.is_completed ? "text-blue-500 hover:bg-blue-50" : "text-green-600 hover:bg-green-50")} onClick={() => toggleComplete(reminder)} title={reminder.is_completed ? "Desmarcar" : "Marcar como hecho"}>
+                    <Check size={18} />
+                  </Button>
+                  <Button variant="outline" className="p-2 text-primary hover:bg-primary/10" onClick={() => handleEdit(reminder)} title="Editar">
+                    <Edit2 size={18} />
+                  </Button>
+                  <Button variant="outline" className="p-2 text-red-500 hover:bg-red-50 border-red-100" onClick={() => handleDelete(reminder.id!)} title="Eliminar">
+                    <Trash2 size={18} />
+                  </Button>
+                </div>
               </Card>
             ))
           )}
@@ -603,7 +649,7 @@ const Reminders = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative z-10">
-              <h3 className="text-xl font-bold text-gray-800 mb-6">Nuevo Recordatorio</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-6">{editingId ? 'Editar Recordatorio' : 'Nuevo Recordatorio'}</h3>
               <form onSubmit={handleAdd} className="space-y-4">
                 <Input label="Título" required value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
                 <TextArea label="Descripción" required value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
