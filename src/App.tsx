@@ -99,12 +99,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const menuItems = [
+  const isPsicologa = user?.role === UserRole.PSICOLOGA;
+
+  const menuItems = isPsicologa ? [
     { icon: HomeIcon, label: 'Inicio', path: '/' },
     { icon: Calendar, label: 'Agenda', path: '/schedule' },
     { icon: AlertCircle, label: 'Recordatorios', path: '/reminders' },
     { icon: FileText, label: 'Historial', path: '/history' },
     { icon: Plus, label: 'Registrar Atención', path: '/new' },
+  ] : [
+    { icon: FileText, label: 'Historial', path: '/history' },
   ];
 
   const handleGoToPortal = () => {
@@ -150,7 +154,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800 truncate">{user?.full_name}</p>
-              <p className="text-[10px] text-secondary font-bold uppercase">Psicólogo(a)</p>
+              <p className="text-[10px] text-secondary font-bold uppercase">
+                {user?.role === UserRole.ADMIN ? 'Administrativo' : user?.role === UserRole.SUPERVISOR ? 'Supervisor(a)' : 'Psicólogo(a)'}
+              </p>
             </div>
           </div>
           <button
@@ -686,14 +692,22 @@ const History = () => {
   const [filterDate, setFilterDate] = useState('');
   const navigate = useNavigate();
 
+  const isPsicologa = user?.role === UserRole.PSICOLOGA;
+
   const fetchAttentions = async () => {
     if (!user) return;
-    const { data } = await supabase
+
+    let query = supabase
       .from('psych_attentions')
       .select('*')
-      .eq('psychologist_id', user.id)
       .order('date', { ascending: false })
       .order('time', { ascending: false });
+
+    if (isPsicologa) {
+      query = query.eq('psychologist_id', user.id);
+    }
+
+    const { data } = await query;
     if (data) setAttentions(data);
     setLoading(false);
   };
@@ -719,9 +733,11 @@ const History = () => {
           <h1 className="text-2xl font-bold text-gray-800">Historial de Atenciones</h1>
           <p className="text-secondary">Consulta y descarga registros anteriores</p>
         </div>
-        <Button onClick={() => navigate('/new')}>
-          <Plus size={18} /> Registrar Atención
-        </Button>
+        {isPsicologa && (
+          <Button onClick={() => navigate('/new')}>
+            <Plus size={18} /> Registrar Atención
+          </Button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row gap-4">
@@ -772,8 +788,10 @@ const History = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" className="p-2" onClick={() => generateAttentionPDF({ ...attention, psychologist_name: user?.full_name })}><Download size={18} /></Button>
-                <Button variant="outline" className="p-2 text-red-500 hover:bg-red-50" onClick={() => handleDelete(attention.id!)}><Trash2 size={18} /></Button>
+                <Button variant="outline" className="p-2 text-primary hover:bg-primary/10" onClick={() => generateAttentionPDF({ ...attention, psychologist_name: attention.psychologist_name || user?.full_name })} title="Descargar PDF"><Download size={18} /></Button>
+                {isPsicologa && (
+                  <Button variant="outline" className="p-2 text-red-500 hover:bg-red-50" onClick={() => handleDelete(attention.id!)} title="Eliminar"><Trash2 size={18} /></Button>
+                )}
               </div>
             </Card>
           ))}
@@ -876,6 +894,8 @@ const MainApp = () => {
   const { user } = useContext(AuthContext);
   if (!user) return null;
 
+  const isPsicologa = user.role === UserRole.PSICOLOGA;
+
   return (
     <Layout>
       <AnimatePresence mode="wait">
@@ -886,11 +906,11 @@ const MainApp = () => {
           transition={{ duration: 0.2 }}
         >
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/reminders" element={<Reminders />} />
+            <Route path="/" element={isPsicologa ? <Home /> : <Navigate to="/history" replace />} />
+            {isPsicologa && <Route path="/schedule" element={<Schedule />} />}
+            {isPsicologa && <Route path="/reminders" element={<Reminders />} />}
             <Route path="/history" element={<History />} />
-            <Route path="/new" element={<NewAttention />} />
+            {isPsicologa && <Route path="/new" element={<NewAttention />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </motion.div>
@@ -1005,7 +1025,7 @@ export default function App() {
         <Route
           path="/*"
           element={
-            <RequireAuth allowedRoles={[UserRole.PSICOLOGA, UserRole.ADMIN]}>
+            <RequireAuth allowedRoles={[UserRole.PSICOLOGA, UserRole.ADMIN, UserRole.SUPERVISOR]}>
               <MainApp />
             </RequireAuth>
           }
