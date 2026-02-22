@@ -31,7 +31,7 @@ export const generateAttentionPDF = (attention: Attention) => {
 
   doc.setFontSize(14);
   doc.setFont("helvetica", "normal");
-  doc.text("Departamento de Psicología", 105, 30, { align: "center" });
+  doc.text("Área de Psicología", 105, 30, { align: "center" });
 
   // Title
   doc.setTextColor(0, 0, 0);
@@ -48,7 +48,7 @@ export const generateAttentionPDF = (attention: Attention) => {
       ["Estudiante", attention.student_name],
       ["Grado y Sección", attention.grade],
       ["Fecha de Atención", format(new Date(attention.date), "dd 'de' MMMM, yyyy", { locale: es })],
-      ["Hora", attention.time],
+      ["Hora", attention.time || "N/A"],
       ["Psicólogo(a)", attention.psychologist_name || "N/A"],
     ],
   });
