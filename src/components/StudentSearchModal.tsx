@@ -46,20 +46,22 @@ const StudentSearchModal: React.FC<StudentSearchModalProps> = ({ isOpen, onClose
 
     const searchStudents = async () => {
         setLoading(true);
-        const { data, error } = await supabase
+
+        let query = supabase
             .from('students')
             .select(`
-        id,
-        first_name,
-        last_name,
-        classrooms (
-          level,
-          grade,
-          section
-        )
-      `)
-            .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
-            .limit(10);
+                id,
+                first_name,
+                last_name,
+                classrooms:classrooms!students_classroom_id_fkey(level, grade, section)
+            `);
+
+        const words = searchTerm.trim().split(/\s+/).filter(w => w.length > 0);
+        words.forEach(word => {
+            query = query.or(`first_name.ilike.%${word}%,last_name.ilike.%${word}%`);
+        });
+
+        const { data, error } = await query.limit(10);
 
         if (error) {
             console.error(error);
