@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import { UserRole, Profile, PsychAttention, PsychAppointment, PsychReminder } from './types';
 import AuthCallback from './pages/AuthCallback';
 import RequireAuth from './components/RequireAuth';
+import StudentSearchModal from './components/StudentSearchModal';
 import {
   LogOut, User, Calendar, Plus, FileText, AlertCircle,
   Download, School, Search, X, Home as HomeIcon, Clock,
@@ -50,10 +51,17 @@ const Button = ({ className, variant = 'primary', ...props }: React.ButtonHTMLAt
   );
 };
 
-const Input = ({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string }) => (
-  <div className="flex flex-col gap-1 w-full">
+const Input = ({ label, rightElement, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string, rightElement?: React.ReactNode }) => (
+  <div className="flex flex-col gap-1 w-full relative">
     {label && <label className="text-sm font-semibold text-secondary">{label}</label>}
-    <input className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-white" {...props} />
+    <div className="relative flex items-center">
+      <input className={cn("w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-white", rightElement ? "pr-12" : "")} {...props} />
+      {rightElement && (
+        <div className="absolute right-2 flex items-center justify-center">
+          {rightElement}
+        </div>
+      )}
+    </div>
   </div>
 );
 
@@ -372,6 +380,7 @@ const Schedule = () => {
   const [appointments, setAppointments] = useState<PsychAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showStudentSearch, setShowStudentSearch] = useState(false);
   const [formData, setFormData] = useState({ student_name: '', grade: '', date: '', time: '' });
   const navigate = useNavigate();
 
@@ -413,6 +422,11 @@ const Schedule = () => {
 
   return (
     <div className="p-6 md:p-10">
+      <StudentSearchModal
+        isOpen={showStudentSearch}
+        onClose={() => setShowStudentSearch(false)}
+        onSelect={(name, grade) => setFormData({ ...formData, student_name: name, grade })}
+      />
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Agenda de Citas</h1>
@@ -468,7 +482,17 @@ const Schedule = () => {
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative z-10">
               <h3 className="text-xl font-bold text-gray-800 mb-6">Programar Nueva Cita</h3>
               <form onSubmit={handleAdd} className="space-y-4">
-                <Input label="Estudiante" required value={formData.student_name} onChange={e => setFormData({ ...formData, student_name: e.target.value })} />
+                <Input
+                  label="Estudiante"
+                  required
+                  value={formData.student_name}
+                  onChange={e => setFormData({ ...formData, student_name: e.target.value })}
+                  rightElement={
+                    <button type="button" onClick={() => setShowStudentSearch(true)} className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors">
+                      <Search size={18} />
+                    </button>
+                  }
+                />
                 <Input label="Grado" required value={formData.grade} onChange={e => setFormData({ ...formData, grade: e.target.value })} />
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Fecha" type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
@@ -718,6 +742,7 @@ const NewAttention = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
+  const [showStudentSearch, setShowStudentSearch] = useState(false);
 
   const apptFromState = location.state?.appt as PsychAppointment | undefined;
 
@@ -761,9 +786,24 @@ const NewAttention = () => {
       </div>
 
       <Card>
+        <StudentSearchModal
+          isOpen={showStudentSearch}
+          onClose={() => setShowStudentSearch(false)}
+          onSelect={(name, grade) => setFormData({ ...formData, student_name: name, grade })}
+        />
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
-            <Input label="Estudiante" required value={formData.student_name} onChange={e => setFormData({ ...formData, student_name: e.target.value })} />
+            <Input
+              label="Estudiante"
+              required
+              value={formData.student_name}
+              onChange={e => setFormData({ ...formData, student_name: e.target.value })}
+              rightElement={
+                <button type="button" onClick={() => setShowStudentSearch(true)} className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors">
+                  <Search size={18} />
+                </button>
+              }
+            />
             <Input label="Grado y Sección" required value={formData.grade} onChange={e => setFormData({ ...formData, grade: e.target.value })} />
           </div>
           <div className="grid md:grid-cols-2 gap-6">
