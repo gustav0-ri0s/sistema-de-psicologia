@@ -1,12 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 
 const AuthCallback: React.FC = () => {
     const navigate = useNavigate();
 
+    const isProcessed = useRef(false);
+
     useEffect(() => {
         const handleCallback = async () => {
+            if (isProcessed.current) return;
+            isProcessed.current = true;
+
             const hash = window.location.hash.substring(1);
             const params = new URLSearchParams(hash);
 
@@ -22,6 +27,8 @@ const AuthCallback: React.FC = () => {
                     });
 
                     if (error) throw error;
+
+                    localStorage.removeItem('vc_last_activity');
 
                     window.history.replaceState(null, '', window.location.pathname);
                     navigate(returnTo, { replace: true });
