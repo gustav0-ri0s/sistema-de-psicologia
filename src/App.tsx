@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabase';
-import { UserRole, Profile, PsychAttention, PsychAppointment, PsychReminder } from './types';
+import { UserRole, Profile, PsychAttention, PsychAppointment, PsychReminder, PsychAppointmentSuggestion } from './types';
 import AuthCallback from './pages/AuthCallback';
 import RequireAuth from './components/RequireAuth';
 import StudentSearchModal from './components/StudentSearchModal';
 import {
   LogOut, User, Calendar, Plus, FileText, AlertCircle,
   Download, School, Search, X, Home as HomeIcon, Clock,
-  CheckCircle, ChevronRight, Trash2, Edit2, Check
+  CheckCircle, ChevronRight, Trash2, Edit2, Check, Bell, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -101,12 +101,30 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const isPsicologa = user?.role === UserRole.PSICOLOGA;
 
+  const [pendingSuggestions, setPendingSuggestions] = useState(0);
+
+  useEffect(() => {
+    if (!isPsicologa) return;
+    const fetchPendingCount = async () => {
+      const { count } = await supabase
+        .from('psych_appointment_suggestions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      setPendingSuggestions(count || 0);
+    };
+    fetchPendingCount();
+    // Poll every 60 seconds for new suggestions
+    const interval = setInterval(fetchPendingCount, 60000);
+    return () => clearInterval(interval);
+  }, [isPsicologa]);
+
   const menuItems = isPsicologa ? [
     { icon: HomeIcon, label: 'Inicio', path: '/' },
     { icon: Calendar, label: 'Agenda', path: '/schedule' },
     { icon: AlertCircle, label: 'Recordatorios', path: '/reminders' },
     { icon: FileText, label: 'Historial', path: '/history' },
     { icon: Plus, label: 'Registrar Atención', path: '/new' },
+    { icon: Bell, label: 'Sugerencias', path: '/suggestions', badge: pendingSuggestions },
   ] : [
     { icon: FileText, label: 'Historial', path: '/history' },
   ];
@@ -135,7 +153,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               key={item.path}
               to={item.path}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium",
+                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium relative",
                 location.pathname === item.path
                   ? "bg-primary/10 text-primary"
                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
@@ -143,6 +161,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             >
               <item.icon size={20} />
               {item.label}
+              {(item as any).badge > 0 && (
+                <span className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[9px] font-black animate-pulse">
+                  {(item as any).badge}
+                </span>
+              )}
             </Link>
           ))}
         </nav>
@@ -207,6 +230,7 @@ const Home = () => {
   const [stats, setStats] = useState({ totalAttentions: 0, todayAppointments: 0 });
   const [appointments, setAppointments] = useState<PsychAppointment[]>([]);
   const [reminders, setReminders] = useState<PsychReminder[]>([]);
+  const [pendingSuggestions, setPendingSuggestions] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const navigate = useNavigate();
 
@@ -220,11 +244,12 @@ const Home = () => {
     if (!user) return;
     const today = format(new Date(), 'yyyy-MM-dd');
 
-    const [attCount, apptToday, appts, rems] = await Promise.all([
+    const [attCount, apptToday, appts, rems, suggCount] = await Promise.all([
       supabase.from('psych_attentions').select('id', { count: 'exact', head: true }).eq('psychologist_id', user.id),
       supabase.from('psych_appointments').select('id', { count: 'exact', head: true }).eq('psychologist_id', user.id).eq('date', today).eq('status', 'pending'),
       supabase.from('psych_appointments').select('*').eq('psychologist_id', user.id).eq('status', 'pending').order('date', { ascending: true }).order('time', { ascending: true }).limit(5),
       supabase.from('psych_reminders').select('*').eq('psychologist_id', user.id).eq('is_completed', false).order('created_at', { ascending: false }).limit(3),
+      supabase.from('psych_appointment_suggestions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     ]);
 
     setStats({
@@ -233,6 +258,7 @@ const Home = () => {
     });
     if (appts.data) setAppointments(appts.data);
     if (rems.data) setReminders(rems.data);
+    setPendingSuggestions(suggCount.count ?? 0);
   };
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -263,6 +289,23 @@ const Home = () => {
           </div>
         </Card>
       </div>
+
+      {/* Pending Suggestions Alert Banner */}
+      {pendingSuggestions > 0 && (
+        <button
+          onClick={() => navigate('/suggestions')}
+          className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-2xl shadow-lg shadow-violet-500/30 hover:from-violet-700 hover:to-violet-600 transition-all group animate-in slide-in-from-top-4"
+        >
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <Bell size={20} />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="font-black text-sm">⚠ {pendingSuggestions} sugerencia{pendingSuggestions > 1 ? 's' : ''} de atención psicológica pendiente{pendingSuggestions > 1 ? 's' : ''}</p>
+            <p className="text-[11px] opacity-80 font-medium">La supervisora ha sugerido citas para estudiantes involucrados en incidencias. Toca para revisar.</p>
+          </div>
+          <ChevronRight size={20} className="opacity-80 group-hover:translate-x-1 transition-transform shrink-0" />
+        </button>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -890,6 +933,186 @@ const NewAttention = () => {
 
 // --- Main App with Supabase Auth ---
 
+const Suggestions = () => {
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const [suggestions, setSuggestions] = useState<PsychAppointmentSuggestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'pending' | 'all'>('pending');
+
+  const fetchSuggestions = async () => {
+    setLoading(true);
+    let query = supabase
+      .from('psych_appointment_suggestions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (filter === 'pending') {
+      query = query.eq('status', 'pending');
+    }
+
+    const { data } = await query;
+    if (data) setSuggestions(data as PsychAppointmentSuggestion[]);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchSuggestions(); }, [filter]);
+
+  const handleAccept = async (suggestion: PsychAppointmentSuggestion) => {
+    if (!user) return;
+    // Update suggestion status to accepted
+    await supabase.from('psych_appointment_suggestions').update({ status: 'accepted' }).eq('id', suggestion.id);
+    // Create appointment
+    await supabase.from('psych_appointments').insert([{
+      student_name: suggestion.student_name,
+      grade: suggestion.student_grade || '',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      time: '08:00',
+      psychologist_id: user.id,
+      status: 'pending'
+    }]);
+    fetchSuggestions();
+    navigate('/schedule');
+  };
+
+  const handleDismiss = async (id: string) => {
+    await supabase.from('psych_appointment_suggestions').update({ status: 'dismissed' }).eq('id', id);
+    fetchSuggestions();
+  };
+
+  const pendingCount = suggestions.filter(s => s.status === 'pending').length;
+
+  return (
+    <div className="p-6 md:p-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-2xl font-bold text-gray-800">Sugerencias de Cita</h1>
+            {pendingCount > 0 && (
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-black uppercase tracking-wider animate-pulse">
+                <AlertTriangle size={12} />
+                {pendingCount} nuevas
+              </span>
+            )}
+          </div>
+          <p className="text-secondary text-sm">Solicitudes desde el módulo de incidencias para agendar atención psicológica</p>
+        </div>
+        <div className="flex items-center gap-2 bg-gray-100 rounded-xl p-1">
+          <button
+            onClick={() => setFilter('pending')}
+            className={cn('px-4 py-2 rounded-lg text-xs font-bold transition-all', filter === 'pending' ? 'bg-white shadow text-primary' : 'text-gray-500 hover:text-gray-700')}
+          >
+            Pendientes
+          </button>
+          <button
+            onClick={() => setFilter('all')}
+            className={cn('px-4 py-2 rounded-lg text-xs font-bold transition-all', filter === 'all' ? 'bg-white shadow text-primary' : 'text-gray-500 hover:text-gray-700')}
+          >
+            Todas
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      ) : suggestions.length === 0 ? (
+        <div className="bg-white rounded-2xl p-16 text-center border border-dashed border-gray-200 flex flex-col items-center gap-4">
+          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+            <Bell size={32} />
+          </div>
+          <div>
+            <p className="font-bold text-gray-700">No hay sugerencias {filter === 'pending' ? 'pendientes' : 'registradas'}</p>
+            <p className="text-sm text-gray-400 mt-1">Las sugerencias de la supervisora aparecerán aquí</p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {suggestions.map(suggestion => (
+            <Card key={suggestion.id} className={cn(
+              'border-l-4 transition-all',
+              suggestion.status === 'pending' ? 'border-l-violet-500 shadow-md hover:shadow-lg' :
+                suggestion.status === 'accepted' ? 'border-l-green-400 opacity-70' :
+                  'border-l-gray-300 opacity-60'
+            )}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Left: Info */}
+                <div className="flex items-start gap-4">
+                  <div className={cn(
+                    'p-3 rounded-2xl shrink-0',
+                    suggestion.status === 'pending' ? 'bg-violet-50 text-violet-600' :
+                      suggestion.status === 'accepted' ? 'bg-green-50 text-green-600' :
+                        'bg-gray-100 text-gray-400'
+                  )}>
+                    <AlertTriangle size={22} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h4 className="font-bold text-gray-800 text-base">{suggestion.student_name}</h4>
+                      {suggestion.student_grade && (
+                        <Badge>{suggestion.student_grade}</Badge>
+                      )}
+                      <span className={cn(
+                        'px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider',
+                        suggestion.status === 'pending' ? 'bg-violet-100 text-violet-700' :
+                          suggestion.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-500'
+                      )}>
+                        {suggestion.status === 'pending' ? '⚠ Pendiente' : suggestion.status === 'accepted' ? '✓ Aceptada' : '✕ Descartada'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-secondary mb-2">
+                      <span className="flex items-center gap-1">
+                        <FileText size={11} />
+                        Incidencia: <strong className="text-gray-700">{suggestion.incident_correlative}</strong>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <User size={11} />
+                        Sugerido por: <strong className="text-gray-700">{suggestion.suggested_by_name}</strong>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={11} />
+                        {format(new Date(suggestion.created_at), "d 'de' MMMM, HH:mm", { locale: es })}
+                      </span>
+                    </div>
+                    {suggestion.reason && (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-xl border border-gray-100 text-sm text-gray-600 font-medium leading-relaxed">
+                        <span className="text-[10px] font-black uppercase text-gray-400 block mb-1">Motivo / Descripción</span>
+                        {suggestion.reason}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: Actions */}
+                {suggestion.status === 'pending' && (
+                  <div className="flex gap-2 shrink-0 md:flex-col">
+                    <button
+                      onClick={() => handleAccept(suggestion)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95"
+                    >
+                      <Calendar size={14} />
+                      Agendar Cita
+                    </button>
+                    <button
+                      onClick={() => handleDismiss(suggestion.id)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-50 transition-all active:scale-95"
+                    >
+                      <X size={14} />
+                      Descartar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MainApp = () => {
   const { user } = useContext(AuthContext);
   if (!user) return null;
@@ -911,6 +1134,7 @@ const MainApp = () => {
             {isPsicologa && <Route path="/reminders" element={<Reminders />} />}
             <Route path="/history" element={<History />} />
             {isPsicologa && <Route path="/new" element={<NewAttention />} />}
+            {isPsicologa && <Route path="/suggestions" element={<Suggestions />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </motion.div>

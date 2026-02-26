@@ -59,3 +59,17 @@ export interface PsychReminder {
     is_completed?: boolean;
     created_at?: string;
 }
+
+export interface PsychAppointmentSuggestion {
+    id: string;
+    incident_id: string;
+    incident_correlative: string;
+    student_name: string;
+    student_grade?: string;
+    suggested_by: string;
+    suggested_by_name: string;
+    reason?: string;
+    status: 'pending' | 'accepted' | 'dismissed';
+    created_at: string;
+}
+
