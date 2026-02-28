@@ -831,7 +831,7 @@ const History = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" className="p-2 text-primary hover:bg-primary/10" onClick={() => generateAttentionPDF({ ...attention, psychologist_name: attention.psychologist_name || user?.full_name })} title="Descargar PDF"><Download size={18} /></Button>
+                <Button variant="outline" className="p-2 text-primary hover:bg-primary/10" onClick={() => generateAttentionPDF(attention)} title="Descargar PDF"><Download size={18} /></Button>
                 {isPsicologa && (
                   <Button variant="outline" className="p-2 text-red-500 hover:bg-red-50" onClick={() => handleDelete(attention.id!)} title="Eliminar"><Trash2 size={18} /></Button>
                 )}
@@ -871,6 +871,7 @@ const NewAttention = () => {
     const { error } = await supabase.from('psych_attentions').insert([{
       ...formData,
       psychologist_id: user.id,
+      psychologist_name: user.full_name,
     }]);
 
     if (!error) {
