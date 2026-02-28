@@ -508,7 +508,7 @@ const Schedule = () => {
           teachers: [],
           created_by: user.id,
           created_by_name: user.full_name,
-          color: 'bg-violet-500 shadow-violet-500/20',
+          color: 'bg-purple-400 shadow-purple-200/50',
         }]);
       }
       setShowModal(null);
