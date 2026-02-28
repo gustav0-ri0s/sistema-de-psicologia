@@ -14,6 +14,11 @@ export interface Attention {
   recommendations: string;
   psychologist_id?: string;
   psychologist_name?: string;
+  // Campos de actividad
+  record_type?: 'cita' | 'actividad';
+  activity_title?: string;
+  activity_description?: string;
+  participants?: string;
 }
 
 export const generateAttentionPDF = (attention: Attention) => {
@@ -72,6 +77,8 @@ export const generateAttentionPDF = (attention: Attention) => {
     });
   };
 
+  const isActividad = attention.record_type === 'actividad';
+
   // ══════════════════════════════════════════════════════════════════════
   // ENCABEZADO
   // ══════════════════════════════════════════════════════════════════════
@@ -91,13 +98,30 @@ export const generateAttentionPDF = (attention: Attention) => {
   doc.setTextColor(30, 30, 30);
   doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
-  doc.text("REGISTRO DE ATENCIÓN PSICOLÓGICA", pageW / 2, 52, { align: "center" });
+  const docTitle = isActividad ? "REGISTRO DE ACTIVIDAD PSICOLÓGICA" : "REGISTRO DE ATENCIÓN PSICOLÓGICA";
+  doc.text(docTitle, pageW / 2, 52, { align: "center" });
 
   y = 60;
 
   // ══════════════════════════════════════════════════════════════════════
-  // TABLA DE DATOS GENERALES (usa autoTable)
+  // TABLA DE DATOS GENERALES
   // ══════════════════════════════════════════════════════════════════════
+  const tableBody = isActividad
+    ? [
+      ["Actividad", attention.activity_title || attention.student_name || "—"],
+      ["Participantes", attention.participants || attention.grade || "—"],
+      ["Fecha", format(new Date(attention.date), "dd 'de' MMMM, yyyy", { locale: es })],
+      ["Hora", attention.time || "—"],
+      ["Psicólogo(a)", attention.psychologist_name || "—"],
+    ]
+    : [
+      ["Estudiante", attention.student_name || "—"],
+      ["Grado y Sección", attention.grade || "—"],
+      ["Fecha de Atención", format(new Date(attention.date), "dd 'de' MMMM, yyyy", { locale: es })],
+      ["Hora", attention.time || "—"],
+      ["Psicólogo(a)", attention.psychologist_name || "—"],
+    ];
+
   autoTable(doc, {
     startY: y,
     margin: { left: marginL, right: marginR },
@@ -108,13 +132,7 @@ export const generateAttentionPDF = (attention: Attention) => {
       0: { fontStyle: "bold", cellWidth: 50 },
       1: { cellWidth: contentW - 50 },
     },
-    body: [
-      ["Estudiante", attention.student_name || "—"],
-      ["Grado y Sección", attention.grade || "—"],
-      ["Fecha de Atención", format(new Date(attention.date), "dd 'de' MMMM, yyyy", { locale: es })],
-      ["Hora", attention.time || "—"],
-      ["Psicólogo(a)", attention.psychologist_name || "—"],
-    ],
+    body: tableBody,
   });
 
   y = (doc as any).lastAutoTable.finalY + 4;
@@ -122,9 +140,13 @@ export const generateAttentionPDF = (attention: Attention) => {
   // ══════════════════════════════════════════════════════════════════════
   // SECCIONES DE TEXTO
   // ══════════════════════════════════════════════════════════════════════
-  printSection("Motivo de Consulta:", attention.reason, 6);
-  printSection("Observaciones:", attention.observations, 8);
-  printSection("Recomendaciones / Plan de Acción:", attention.recommendations, 8);
+  if (isActividad) {
+    printSection("Detalle de lo realizado:", attention.activity_description || attention.reason || "—", 6);
+  } else {
+    printSection("Motivo de Consulta:", attention.reason, 6);
+    printSection("Observaciones:", attention.observations, 8);
+    printSection("Recomendaciones / Plan de Acción:", attention.recommendations, 8);
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // FIRMA (siempre en la última página, dentro del margen)

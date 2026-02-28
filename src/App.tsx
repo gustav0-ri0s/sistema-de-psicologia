@@ -8,7 +8,8 @@ import StudentSearchModal from './components/StudentSearchModal';
 import {
   LogOut, User, Calendar, Plus, FileText, AlertCircle,
   Download, School, Search, X, Home as HomeIcon, Clock,
-  CheckCircle, ChevronRight, Trash2, Edit2, Check, Bell, AlertTriangle
+  CheckCircle, ChevronRight, Trash2, Edit2, Check, Bell, AlertTriangle,
+  Activity, Users as UsersIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -439,9 +440,10 @@ const Schedule = () => {
   const { user } = useContext(AuthContext);
   const [appointments, setAppointments] = useState<PsychAppointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState<'cita' | 'actividad' | null>(null);
   const [showStudentSearch, setShowStudentSearch] = useState(false);
   const [formData, setFormData] = useState({ student_name: '', grade: '', date: '', time: '' });
+  const [actFormData, setActFormData] = useState({ activity_title: '', participants: '', date: '', time: '' });
   const navigate = useNavigate();
 
   const fetchAppointments = async () => {
@@ -460,18 +462,39 @@ const Schedule = () => {
 
   useEffect(() => { if (user) fetchAppointments(); }, [user]);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAddCita = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     const { error } = await supabase.from('psych_appointments').insert([{
       ...formData,
       psychologist_id: user.id,
-      status: 'pending'
+      status: 'pending',
+      type: 'cita'
     }]);
     if (!error) {
-      setShowModal(false);
+      setShowModal(null);
       fetchAppointments();
       setFormData({ student_name: '', grade: '', date: '', time: '' });
+    }
+  };
+
+  const handleAddActividad = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const { error } = await supabase.from('psych_appointments').insert([{
+      student_name: actFormData.activity_title,
+      grade: actFormData.participants,
+      date: actFormData.date,
+      time: actFormData.time,
+      psychologist_id: user.id,
+      status: 'pending',
+      type: 'actividad',
+      activity_title: actFormData.activity_title
+    }]);
+    if (!error) {
+      setShowModal(null);
+      fetchAppointments();
+      setActFormData({ activity_title: '', participants: '', date: '', time: '' });
     }
   };
 
@@ -487,15 +510,21 @@ const Schedule = () => {
         onClose={() => setShowStudentSearch(false)}
         onSelect={(name, grade) => setFormData({ ...formData, student_name: name, grade })}
       />
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Agenda de Citas</h1>
-          <p className="text-secondary">Programación de sesiones psicológicas</p>
+          <h1 className="text-2xl font-bold text-gray-800">Agenda</h1>
+          <p className="text-secondary">Citas y actividades programadas</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
-          <Plus size={18} />
-          Programar Cita
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowModal('cita')}>
+            <Calendar size={18} />
+            Programar Cita
+          </Button>
+          <Button variant="outline" onClick={() => setShowModal('actividad')}>
+            <Activity size={18} />
+            Programar Actividad
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -510,38 +539,52 @@ const Schedule = () => {
               <p className="text-gray-500">No hay citas pendientes.</p>
             </div>
           ) : (
-            appointments.map(appt => (
-              <Card key={appt.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center font-bold text-sm">
-                    {appt.time?.slice(0, 5)}
+            appointments.map(appt => {
+              const isActividad = (appt as any).type === 'actividad';
+              return (
+                <Card key={appt.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 ${isActividad ? 'border-l-violet-400' : 'border-l-primary'}`}>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm ${isActividad ? 'bg-violet-100 text-violet-600' : 'bg-primary/10 text-primary'}`}>
+                      {isActividad ? <Activity size={20} /> : appt.time?.slice(0, 5)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h4 className="font-bold text-gray-800">{isActividad ? (appt as any).activity_title || appt.student_name : appt.student_name}</h4>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isActividad ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {isActividad ? 'Actividad' : 'Cita'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-secondary">
+                        {isActividad ? appt.grade : appt.grade} • {format(new Date(appt.date + 'T00:00:00'), "d 'de' MMMM", { locale: es })} {appt.time ? `• ${appt.time.slice(0, 5)}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-gray-800">{appt.student_name}</h4>
-                    <p className="text-xs text-secondary">{appt.grade} • {format(new Date(appt.date + 'T00:00:00'), "d 'de' MMMM", { locale: es })}</p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" className="text-green-600 hover:bg-green-50" onClick={() => navigate('/new', { state: { appt } })}>
+                      <CheckCircle size={18} /> {isActividad ? 'Registrar Actividad' : 'Registrar Atención'}
+                    </Button>
+                    <Button variant="outline" className="text-red-500 hover:bg-red-50" onClick={() => updateStatus(appt.id!, 'cancelled')}>
+                      <X size={18} /> Cancelar
+                    </Button>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" className="text-green-600 hover:bg-green-50" onClick={() => navigate('/new', { state: { appt } })}>
-                    <CheckCircle size={18} /> Registrar Atención
-                  </Button>
-                  <Button variant="outline" className="text-red-500 hover:bg-red-50" onClick={() => updateStatus(appt.id!, 'cancelled')}>
-                    <X size={18} /> Cancelar
-                  </Button>
-                </div>
-              </Card>
-            ))
+                </Card>
+              );
+            })
           )}
         </div>
       )}
 
       <AnimatePresence>
-        {showModal && (
+        {/* Modal Cita */}
+        {showModal === 'cita' && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(null)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative z-10">
-              <h3 className="text-xl font-bold text-gray-800 mb-6">Programar Nueva Cita</h3>
-              <form onSubmit={handleAdd} className="space-y-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><Calendar size={20} /></div>
+                <h3 className="text-xl font-bold text-gray-800">Programar Nueva Cita</h3>
+              </div>
+              <form onSubmit={handleAddCita} className="space-y-4">
                 <Input
                   label="Estudiante"
                   required
@@ -559,8 +602,33 @@ const Schedule = () => {
                   <Input label="Hora" type="time" required value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} />
                 </div>
                 <div className="flex gap-3 pt-4">
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancelar</Button>
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(null)}>Cancelar</Button>
                   <Button type="submit" className="flex-1">Programar</Button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal Actividad */}
+        {showModal === 'actividad' && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(null)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative z-10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center"><Activity size={20} /></div>
+                <h3 className="text-xl font-bold text-gray-800">Programar Actividad</h3>
+              </div>
+              <form onSubmit={handleAddActividad} className="space-y-4">
+                <Input label="Nombre de la Actividad" placeholder="Ej: Taller de manejo del estrés" required value={actFormData.activity_title} onChange={e => setActFormData({ ...actFormData, activity_title: e.target.value })} />
+                <Input label="Participantes / Dirigido a" placeholder="Ej: Docentes, Aula 3°A, Todos" required value={actFormData.participants} onChange={e => setActFormData({ ...actFormData, participants: e.target.value })} />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Fecha" type="date" required value={actFormData.date} onChange={e => setActFormData({ ...actFormData, date: e.target.value })} />
+                  <Input label="Hora" type="time" required value={actFormData.time} onChange={e => setActFormData({ ...actFormData, time: e.target.value })} />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(null)}>Cancelar</Button>
+                  <Button type="submit" className="flex-1" style={{ background: '#7c3aed' }}>Programar</Button>
                 </div>
               </form>
             </motion.div>
@@ -818,26 +886,43 @@ const History = () => {
         </div>
       ) : (
         <div className="grid gap-4">
-          {filteredAttentions.map(attention => (
-            <Card key={attention.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-shadow">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-bold text-gray-800">{attention.student_name}</h3>
-                  <Badge>{attention.grade}</Badge>
+          {filteredAttentions.map(attention => {
+            const isActividad = (attention as any).record_type === 'actividad';
+            return (
+              <Card key={attention.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-shadow border-l-4 ${isActividad ? 'border-l-violet-400' : 'border-l-primary'}`}>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActividad ? 'bg-violet-100 text-violet-600' : 'bg-primary/10 text-primary'}`}>
+                      {isActividad ? <Activity size={16} /> : <FileText size={16} />}
+                    </div>
+                    <h3 className="font-bold text-gray-800">
+                      {isActividad ? ((attention as any).activity_title || attention.student_name) : attention.student_name}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isActividad ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {isActividad ? 'Actividad' : 'Cita'}
+                    </span>
+                    {!isActividad && <Badge>{attention.grade}</Badge>}
+                  </div>
+                  <div className="flex gap-4 text-xs text-secondary font-medium flex-wrap pl-10">
+                    <span className="flex items-center gap-1"><Calendar size={12} /> {format(new Date(attention.date + 'T00:00:00'), "dd/MM/yyyy")}</span>
+                    {attention.time && <span className="flex items-center gap-1"><Clock size={12} /> {attention.time.slice(0, 5)}</span>}
+                    {isActividad && (attention as any).participants && (
+                      <span className="flex items-center gap-1"><UsersIcon size={12} /> {(attention as any).participants}</span>
+                    )}
+                  </div>
+                  {isActividad && (attention as any).activity_description && (
+                    <p className="text-xs text-gray-500 mt-2 pl-10 line-clamp-2">{(attention as any).activity_description}</p>
+                  )}
                 </div>
-                <div className="flex gap-4 text-xs text-secondary font-medium">
-                  <span className="flex items-center gap-1"><Calendar size={12} /> {format(new Date(attention.date + 'T00:00:00'), "dd/MM/yyyy")}</span>
-                  <span className="flex items-center gap-1"><Clock size={12} /> {attention.time?.slice(0, 5)}</span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" className="p-2 text-primary hover:bg-primary/10" onClick={() => generateAttentionPDF(attention as any)} title="Descargar PDF"><Download size={18} /></Button>
+                  {isPsicologa && (
+                    <Button variant="outline" className="p-2 text-red-500 hover:bg-red-50" onClick={() => handleDelete(attention.id!)} title="Eliminar"><Trash2 size={18} /></Button>
+                  )}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" className="p-2 text-primary hover:bg-primary/10" onClick={() => generateAttentionPDF(attention)} title="Descargar PDF"><Download size={18} /></Button>
-                {isPsicologa && (
-                  <Button variant="outline" className="p-2 text-red-500 hover:bg-red-50" onClick={() => handleDelete(attention.id!)} title="Eliminar"><Trash2 size={18} /></Button>
-                )}
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
@@ -852,10 +937,14 @@ const NewAttention = () => {
   const [showStudentSearch, setShowStudentSearch] = useState(false);
 
   const apptFromState = location.state?.appt as PsychAppointment | undefined;
+  const apptType = (apptFromState as any)?.type || 'cita';
 
-  const [formData, setFormData] = useState({
-    student_name: apptFromState?.student_name || '',
-    grade: apptFromState?.grade || '',
+  const [recordType, setRecordType] = useState<'cita' | 'actividad'>(apptType);
+
+  // Formulario cita
+  const [citaForm, setCitaForm] = useState({
+    student_name: apptType === 'cita' ? (apptFromState?.student_name || '') : '',
+    grade: apptType === 'cita' ? (apptFromState?.grade || '') : '',
     date: apptFromState?.date || format(new Date(), 'yyyy-MM-dd'),
     time: apptFromState?.time?.slice(0, 5) || format(new Date(), 'HH:mm'),
     reason: '',
@@ -863,19 +952,49 @@ const NewAttention = () => {
     recommendations: '',
   });
 
+  // Formulario actividad
+  const [actForm, setActForm] = useState({
+    activity_title: apptType === 'actividad' ? ((apptFromState as any)?.activity_title || apptFromState?.student_name || '') : '',
+    participants: apptType === 'actividad' ? (apptFromState?.grade || '') : '',
+    date: apptFromState?.date || format(new Date(), 'yyyy-MM-dd'),
+    time: apptFromState?.time?.slice(0, 5) || format(new Date(), 'HH:mm'),
+    activity_description: '',
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
 
-    const { error } = await supabase.from('psych_attentions').insert([{
-      ...formData,
-      psychologist_id: user.id,
-      psychologist_name: user.full_name,
-    }]);
+    let payload: any;
+    if (recordType === 'cita') {
+      payload = {
+        ...citaForm,
+        psychologist_id: user.id,
+        psychologist_name: user.full_name,
+        record_type: 'cita',
+      };
+    } else {
+      payload = {
+        student_name: actForm.activity_title,
+        grade: actForm.participants,
+        date: actForm.date,
+        time: actForm.time,
+        psychologist_id: user.id,
+        psychologist_name: user.full_name,
+        record_type: 'actividad',
+        activity_title: actForm.activity_title,
+        activity_description: actForm.activity_description,
+        participants: actForm.participants,
+        reason: actForm.activity_description,
+        observations: '',
+        recommendations: '',
+      };
+    }
+
+    const { error } = await supabase.from('psych_attentions').insert([payload]);
 
     if (!error) {
-      // If came from appointment, mark it as completed
       if (apptFromState?.id) {
         await supabase.from('psych_appointments').update({ status: 'completed' }).eq('id', apptFromState.id);
       }
@@ -889,42 +1008,85 @@ const NewAttention = () => {
   return (
     <div className="p-6 md:p-10 max-w-4xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Registrar Atención</h1>
-        <p className="text-secondary">Complete los detalles de la sesión psicológica</p>
+        <h1 className="text-2xl font-bold text-gray-800">Registrar</h1>
+        <p className="text-secondary">Registra una cita individual o una actividad grupal</p>
+      </div>
+
+      {/* Selector tipo */}
+      <div className="flex gap-3 mb-6">
+        <button
+          type="button"
+          onClick={() => setRecordType('cita')}
+          disabled={!!apptFromState}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-all ${recordType === 'cita' ? 'bg-primary/10 border-primary text-primary' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+        >
+          <Calendar size={18} /> Cita Individual
+        </button>
+        <button
+          type="button"
+          onClick={() => setRecordType('actividad')}
+          disabled={!!apptFromState}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-all ${recordType === 'actividad' ? 'bg-violet-100 border-violet-500 text-violet-700' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+        >
+          <Activity size={18} /> Actividad
+        </button>
       </div>
 
       <Card>
         <StudentSearchModal
           isOpen={showStudentSearch}
           onClose={() => setShowStudentSearch(false)}
-          onSelect={(name, grade) => setFormData({ ...formData, student_name: name, grade })}
+          onSelect={(name, grade) => setCitaForm({ ...citaForm, student_name: name, grade })}
         />
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <Input
-              label="Estudiante"
-              required
-              value={formData.student_name}
-              onChange={e => setFormData({ ...formData, student_name: e.target.value })}
-              rightElement={
-                <button type="button" onClick={() => setShowStudentSearch(true)} className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors">
-                  <Search size={18} />
-                </button>
-              }
-            />
-            <Input label="Grado y Sección" required value={formData.grade} onChange={e => setFormData({ ...formData, grade: e.target.value })} />
-          </div>
-          <div className="grid md:grid-cols-2 gap-6">
-            <Input label="Fecha" type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
-            <Input label="Hora" type="time" required value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} />
-          </div>
-          <TextArea label="Motivo de Consulta" required value={formData.reason} onChange={e => setFormData({ ...formData, reason: e.target.value })} />
-          <TextArea label="Observaciones" required value={formData.observations} onChange={e => setFormData({ ...formData, observations: e.target.value })} />
-          <TextArea label="Recomendaciones" required value={formData.recommendations} onChange={e => setFormData({ ...formData, recommendations: e.target.value })} />
+
+          {recordType === 'cita' ? (
+            <>
+              <div className="grid md:grid-cols-2 gap-6">
+                <Input
+                  label="Estudiante"
+                  required
+                  value={citaForm.student_name}
+                  onChange={e => setCitaForm({ ...citaForm, student_name: e.target.value })}
+                  rightElement={
+                    <button type="button" onClick={() => setShowStudentSearch(true)} className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors">
+                      <Search size={18} />
+                    </button>
+                  }
+                />
+                <Input label="Grado y Sección" required value={citaForm.grade} onChange={e => setCitaForm({ ...citaForm, grade: e.target.value })} />
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                <Input label="Fecha" type="date" required value={citaForm.date} onChange={e => setCitaForm({ ...citaForm, date: e.target.value })} />
+                <Input label="Hora" type="time" required value={citaForm.time} onChange={e => setCitaForm({ ...citaForm, time: e.target.value })} />
+              </div>
+              <TextArea label="Motivo de Consulta" required value={citaForm.reason} onChange={e => setCitaForm({ ...citaForm, reason: e.target.value })} />
+              <TextArea label="Observaciones" required value={citaForm.observations} onChange={e => setCitaForm({ ...citaForm, observations: e.target.value })} />
+              <TextArea label="Recomendaciones / Plan de Acción" required value={citaForm.recommendations} onChange={e => setCitaForm({ ...citaForm, recommendations: e.target.value })} />
+            </>
+          ) : (
+            <>
+              <Input label="Nombre de la Actividad" placeholder="Ej: Taller de manejo del estrés" required value={actForm.activity_title} onChange={e => setActForm({ ...actForm, activity_title: e.target.value })} />
+              <Input label="Participantes / Dirigido a" placeholder="Ej: Docentes, Aula 3°A, Padres de familia" required value={actForm.participants} onChange={e => setActForm({ ...actForm, participants: e.target.value })} />
+              <div className="grid md:grid-cols-2 gap-6">
+                <Input label="Fecha" type="date" required value={actForm.date} onChange={e => setActForm({ ...actForm, date: e.target.value })} />
+                <Input label="Hora" type="time" value={actForm.time} onChange={e => setActForm({ ...actForm, time: e.target.value })} />
+              </div>
+              <TextArea label="Detalle de lo realizado en la actividad" placeholder="Describa los temas tratados, metodología, resultados..." required value={actForm.activity_description} onChange={e => setActForm({ ...actForm, activity_description: e.target.value })} />
+            </>
+          )}
 
           <div className="flex gap-4 justify-end pt-4">
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancelar</Button>
-            <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : 'Guardar Registro'}</Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              style={recordType === 'actividad' ? { background: '#7c3aed' } : {}}
+            >
+              {loading ? 'Guardando...' : recordType === 'actividad' ? 'Guardar Actividad' : 'Guardar Registro'}
+            </Button>
           </div>
         </form>
       </Card>
