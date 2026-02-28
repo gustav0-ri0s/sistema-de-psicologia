@@ -444,6 +444,7 @@ const Schedule = () => {
   const [showStudentSearch, setShowStudentSearch] = useState(false);
   const [formData, setFormData] = useState({ student_name: '', grade: '', date: '', time: '' });
   const [actFormData, setActFormData] = useState({ activity_title: '', participants: '', date: '', time: '' });
+  const [sendActToCalendar, setSendActToCalendar] = useState(false);
   const navigate = useNavigate();
 
   const fetchAppointments = async () => {
@@ -492,7 +493,26 @@ const Schedule = () => {
       activity_title: actFormData.activity_title
     }]);
     if (!error) {
+      // Si se marcó publicar en el calendario institucional
+      if (sendActToCalendar) {
+        const startTime = actFormData.time || '08:00';
+        const [hh, mm] = startTime.split(':').map(Number);
+        const endTime = `${String((hh + 1) % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+        await supabase.from('calendar_events').insert([{
+          title: `🧠 ${actFormData.activity_title}`,
+          description: `Actividad de Psicología. Participantes: ${actFormData.participants}.`,
+          date: actFormData.date,
+          start_time: startTime,
+          end_time: endTime,
+          levels: [],
+          teachers: [],
+          created_by: user.id,
+          created_by_name: user.full_name,
+          color: 'bg-violet-500 shadow-violet-500/20',
+        }]);
+      }
       setShowModal(null);
+      setSendActToCalendar(false);
       fetchAppointments();
       setActFormData({ activity_title: '', participants: '', date: '', time: '' });
     }
@@ -626,7 +646,27 @@ const Schedule = () => {
                   <Input label="Fecha" type="date" required value={actFormData.date} onChange={e => setActFormData({ ...actFormData, date: e.target.value })} />
                   <Input label="Hora" type="time" required value={actFormData.time} onChange={e => setActFormData({ ...actFormData, time: e.target.value })} />
                 </div>
-                <div className="flex gap-3 pt-4">
+
+                {/* Checkbox publicar en calendario */}
+                <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${sendActToCalendar ? 'border-violet-400 bg-violet-50' : 'border-gray-200 hover:border-violet-300'
+                  }`}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 w-4 h-4 accent-violet-600 cursor-pointer"
+                    checked={sendActToCalendar}
+                    onChange={e => setSendActToCalendar(e.target.checked)}
+                  />
+                  <div>
+                    <p className={`font-bold text-sm ${sendActToCalendar ? 'text-violet-700' : 'text-gray-700'}`}>
+                      📅 Publicar en el Calendario Institucional
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      La actividad aparecerá en el módulo de calendarización para que todos puedan verla.
+                    </p>
+                  </div>
+                </label>
+
+                <div className="flex gap-3 pt-2">
                   <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(null)}>Cancelar</Button>
                   <Button type="submit" className="flex-1" style={{ background: '#7c3aed' }}>Programar</Button>
                 </div>
@@ -940,7 +980,6 @@ const NewAttention = () => {
   const apptType = (apptFromState as any)?.type || 'cita';
 
   const [recordType, setRecordType] = useState<'cita' | 'actividad'>(apptType);
-  const [sendToCalendar, setSendToCalendar] = useState(false);
 
   // Formulario cita
   const [citaForm, setCitaForm] = useState({
@@ -996,28 +1035,6 @@ const NewAttention = () => {
     const { error } = await supabase.from('psych_attentions').insert([payload]);
 
     if (!error) {
-      // Si es actividad y se marcó enviar al calendario
-      if (recordType === 'actividad' && sendToCalendar) {
-        const startTime = actForm.time || '08:00';
-        // Calcular hora fin: start + 1 hora
-        const [hh, mm] = startTime.split(':').map(Number);
-        const endH = String((hh + 1) % 24).padStart(2, '0');
-        const endTime = `${endH}:${String(mm).padStart(2, '0')}`;
-
-        await supabase.from('calendar_events').insert([{
-          title: `🧠 ${actForm.activity_title}`,
-          description: `Actividad de Psicología. Participantes: ${actForm.participants}.\n${actForm.activity_description}`,
-          date: actForm.date,
-          start_time: startTime,
-          end_time: endTime,
-          levels: [],
-          teachers: [],
-          created_by: user.id,
-          created_by_name: user.full_name,
-          color: 'bg-violet-500 shadow-violet-500/20',
-        }]);
-      }
-
       if (apptFromState?.id) {
         await supabase.from('psych_appointments').update({ status: 'completed' }).eq('id', apptFromState.id);
       }
@@ -1098,25 +1115,6 @@ const NewAttention = () => {
                 <Input label="Hora" type="time" value={actForm.time} onChange={e => setActForm({ ...actForm, time: e.target.value })} />
               </div>
               <TextArea label="Detalle de lo realizado en la actividad" placeholder="Describa los temas tratados, metodología, resultados..." required value={actForm.activity_description} onChange={e => setActForm({ ...actForm, activity_description: e.target.value })} />
-
-              {/* Checkbox enviar al calendario */}
-              <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${sendToCalendar ? 'border-violet-400 bg-violet-50' : 'border-gray-200 hover:border-violet-300'
-                }`}>
-                <input
-                  type="checkbox"
-                  className="mt-0.5 w-4 h-4 accent-violet-600 cursor-pointer"
-                  checked={sendToCalendar}
-                  onChange={e => setSendToCalendar(e.target.checked)}
-                />
-                <div>
-                  <p className={`font-bold text-sm ${sendToCalendar ? 'text-violet-700' : 'text-gray-700'}`}>
-                    📅 Publicar en el Calendario Institucional
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    La actividad aparecerá automáticamente en el módulo de calendarización para que todos puedan verla.
-                  </p>
-                </div>
-              </label>
             </>
           )}
 
